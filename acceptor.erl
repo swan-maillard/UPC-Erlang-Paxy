@@ -11,11 +11,12 @@ init(Name, PanelId) ->
   case StoredPanelId of
     na ->
       pers:store(AccName, Promised, Voted, Value, PanelId),
+      pers:close(AccName),
       acceptor(Name, Promised, Voted, Value, PanelId);
-    true ->
+    _ ->
+      pers:close(AccName),
       acceptor(Name, Promised, Voted, Value, StoredPanelId)
-  end,
-  pers:close(AccName).
+  end.
 
 acceptor(Name, Promised, Voted, Value, PanelId) ->
   %% We receive a PREPARE request from PROPOSER
