@@ -1,5 +1,5 @@
 -module(paxy).
--export([start/1, stop/0, stop/1]).
+-export([start/1, stop/0, stop/1, crash/1]).
 
 -define(RED, {255,0,0}).
 -define(BLUE, {0,0,255}).
@@ -60,19 +60,36 @@ wait_proposers(N) ->
   end.
 
 stop() ->
-  stop(mariejosette),
-  stop(mariemicheline),
-  stop(mariecunegonde),
-  stop(mariejeanne),
-  stop(marieelise),
+  stop({mariejosette, ?ACC}),
+  stop({mariemicheline, ?ACC}),
+  stop({mariecunegonde, ?ACC}),
+  stop({mariejeanne, ?ACC}),
+  stop({marieelise, ?ACC}),
   stop(gui).
 
 stop(Name) ->
+  if is_tuple(Name) ->
+    Name ! stop;
+  true ->
+    case whereis(Name) of
+        undefined ->
+          ok;
+        Pid ->
+          Pid ! stop
+      end
+  end.
+  
+crash(Name) ->
   case whereis(Name) of
     undefined ->
       ok;
     Pid ->
-      Pid ! stop
+      pers:open(Name),
+      {_, _, _, Pn} = pers:read(Name),
+      Pn ! {updateAcc, "Voted: CRASHED", "Promised: CRASHED", {0,0,0}},
+      pers:close(Name),
+      unregister(Name),
+      exit(Pid, "crash"),
+      timer:sleep(3000),
+      register(Name, acceptor:start(Name, na))
   end.
-
- 

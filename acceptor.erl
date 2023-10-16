@@ -5,10 +5,17 @@ start(Name, PanelId) ->
   spawn(fun() -> init(Name, PanelId) end).
         
 init(Name, PanelId) ->
-  Promised = order:null(), 
-  Voted = order:null(),
-  Value = na,
-  acceptor(Name, Promised, Voted, Value, PanelId).
+  {AccName, _} = Name,
+  pers:open(AccName),
+  {Promised, Voted, Value, StoredPanelId} = pers:read(AccName),
+  case StoredPanelId of
+    na ->
+      pers:store(AccName, Promised, Voted, Value, PanelId),
+      acceptor(Name, Promised, Voted, Value, PanelId);
+    true ->
+      acceptor(Name, Promised, Voted, Value, StoredPanelId)
+  end,
+  pers:close(AccName).
 
 acceptor(Name, Promised, Voted, Value, PanelId) ->
   %% We receive a PREPARE request from PROPOSER
@@ -19,6 +26,11 @@ acceptor(Name, Promised, Voted, Value, PanelId) ->
        %% If Round greater than current promise, we promise it
         true ->
             Proposer ! {promise, Round, Voted, Value},
+            {AccName, _} = Name,
+            pers:open(AccName),
+            pers:store(AccName, Round, Voted, Value, PanelId),
+            pers:close(AccName),
+
             io:format("[Acceptor ~w] Phase 1: promised ~w voted ~w colour ~w~n", [Name, Round, Voted, Value]),
 
             % Update gui
@@ -46,6 +58,10 @@ acceptor(Name, Promised, Voted, Value, PanelId) ->
               % Update gui
               PanelId ! {updateAcc, "Voted: " ++ io_lib:format("~p", [Round]), 
                         "Promised: " ++ io_lib:format("~p", [Promised]), Proposal},
+              {AccName, _} = Name,
+              pers:open(AccName),
+              pers:store(AccName, Promised, Round, Proposal, PanelId),
+              pers:close(AccName),
               %% We update the ACCEPTOR values
               acceptor(Name, Promised, Round, Proposal, PanelId);
             %% Else we keep the previous vote
@@ -60,6 +76,8 @@ acceptor(Name, Promised, Voted, Value, PanelId) ->
           acceptor(Name, Promised, Voted, Value, PanelId)
       end;
     stop ->
+      {AccName, _} = Name,
+      pers:delete(AccName),
       PanelId ! stop,
       ok
   end.
