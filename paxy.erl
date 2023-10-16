@@ -1,5 +1,5 @@
 -module(paxy).
--export([start/1, stop/0, stop/1]).
+-export([start/1, stop/0, stop/1, crash/1]).
 
 -define(RED, {255,0,0}).
 -define(BLUE, {0,0,255}).
@@ -78,3 +78,17 @@ stop(Name) ->
           Pid ! stop
       end
   end.
+
+crash(Name) when is_tuple(Name) ->
+  {AccName, _} = Name,
+  pers:open(AccName),
+  {_, _, _, Pn} = pers:read(AccName),
+  Pn ! {updateAcc, "Voted: CRASHED", "Promised: CRASHED", {0, 0, 0}},
+  unregister(AccName),
+  io:format("CRASH~n"),
+  pers:close(AccName),
+  exit(Name, "crash"),
+  timer:sleep(3000),
+  register(AccName, acceptor:start(Name, na));
+crash(_) ->
+    ok.
