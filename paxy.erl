@@ -11,16 +11,16 @@
 % Sleep is a list with the initial sleep time for each proposer
 start(Sleep) ->
   AcceptorNames = ["Marie-Josette", "Marie-Micheline", "Marie-Cunégonde", "Marie-Jeanne", "Marie-Elise"],
-  AccRegister = [{mariejosette, ?ACC}, {mariemicheline, ?ACC}, {mariecunegonde, ?ACC}, {mariejeanne, ?ACC}, {marieelise, ?ACC}],
+  AccRegister = [mariejosette, mariemicheline, mariecunegonde, mariejeanne, marieelise],
   ProposerNames = [{"Jean-Phillibert", ?RED}, {"Jean-Maxence", ?GREEN}, {"Jean-Eude", ?BLUE}],
-  PropInfo = [{{jeanphillibert, ?PRO}, ?RED}, {{jeanmaxence, ?PRO}, ?GREEN}, {{jeaneude, ?PRO}, ?BLUE}],
+  PropInfo = [{jeanphillibert, ?RED}, {jeanmaxence, ?GREEN}, {jeaneude, ?BLUE}],
   register(gui, spawn(fun() -> gui:start(AcceptorNames, ProposerNames) end)),
   gui ! {reqState, self()},
   receive
     {reqState, State} ->
       {AccIds, PropIds} = State,
-      spawn(?ACC, fun() -> start_acceptors(AccIds, AccRegister) end),
-      spawn(?PRO, fun() ->
+      start_acceptors(AccIds, AccRegister),
+      spawn(fun() ->
         Begin = erlang:monotonic_time(),
         start_proposers(PropIds, PropInfo, AccRegister, Sleep, self()),
         wait_proposers(length(PropIds)),
@@ -29,8 +29,8 @@ start(Sleep) ->
         io:format("[Paxy] Total elapsed time: ~w ms~n", [Elapsed])
       end),
       spawn(fun() ->
-        timer:sleep(500 + rand:uniform(1000)),
-        crash({mariejosette, ?ACC})
+        timer:sleep(rand:uniform(100)+100),
+        crash(mariejosette)
       end)
   end.
     
@@ -39,8 +39,8 @@ start_acceptors(AccIds, AccReg) ->
     [] ->
       ok;
     [AccId|Rest] ->
-      [{RegName, ?ACC}|RegNameRest] = AccReg,
-      register(RegName, acceptor:start({RegName, ?ACC}, AccId)),
+      [RegName|RegNameRest] = AccReg,
+      register(RegName, acceptor:start(RegName, AccId)),
       start_acceptors(Rest, RegNameRest)
   end.
 
@@ -49,9 +49,9 @@ start_proposers(PropIds, PropInfo, Acceptors, Sleep, Main) ->
     [] ->
       ok;
     [PropId|Rest] ->
-      [{{RegName, ?PRO}, Colour}|RestInfo] = PropInfo,
+      [{RegName, Colour}|RestInfo] = PropInfo,
       [FirstSleep|RestSleep] = Sleep,
-      proposer:start({RegName, ?PRO}, Colour, Acceptors, FirstSleep, PropId, Main),	
+      proposer:start(RegName, Colour, Acceptors, FirstSleep, PropId, Main),	
       start_proposers(Rest, RestInfo, Acceptors, RestSleep, Main)
 
   end.
@@ -65,11 +65,11 @@ wait_proposers(N) ->
   end.
 
 stop() ->
-  stop({mariejosette, ?ACC}),
-  stop({mariemicheline, ?ACC}),
-  stop({mariecunegonde, ?ACC}),
-  stop({mariejeanne, ?ACC}),
-  stop({marieelise, ?ACC}),
+  stop(mariejosette),
+  stop(mariemicheline),
+  stop(mariecunegonde),
+  stop(mariejeanne),
+  stop(marieelise),
   stop(gui).
 
 stop(Name) ->
@@ -84,15 +84,18 @@ stop(Name) ->
       end
   end.
 
-crash(Name) when is_tuple(Name) ->
-  {AccName, _} = Name,
-  pers:open(AccName),
-  {_, _, _, Pn} = pers:read(AccName),
-  Pn ! {updateAcc, "Voted: CRASHED", "Promised: CRASHED", {0, 0, 0}},
-  rpc:call(?ACC, erlang, unregister, [AccName]),
-  io:format("CRASH~n"),
-  pers:close(AccName),
-  timer:sleep(1000),
-  register(AccName, acceptor:start(Name, na));
-crash(_) ->
-    ok.
+crash(Name) ->
+  case whereis(Name) of
+    undefined ->
+      ok;
+    Pid ->
+      pers:open(Name),
+      {_, _, _, Pn} = pers:read(Name),
+      Pn ! {updateAcc, "Voted: CRASHED", "Promised: CRASHED", {0,0,0}},
+      io:format("CRASH\n"),
+      pers:close(Name),
+      unregister(Name),
+      exit(Pid, "crash"),
+      timer:sleep(100),
+      register(Name, acceptor:start(Name, na))
+end.

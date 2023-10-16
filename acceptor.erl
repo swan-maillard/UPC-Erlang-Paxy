@@ -5,16 +5,15 @@ start(Name, PanelId) ->
   spawn(fun() -> init(Name, PanelId) end).
         
 init(Name, PanelId) ->
-  {AccName, _} = Name,
-  pers:open(AccName),
-  {Promised, Voted, Value, StoredPanelId} = pers:read(AccName),
+  pers:open(Name),
+  {Promised, Voted, Value, StoredPanelId} = pers:read(Name),
   case StoredPanelId of
     na ->
-      pers:store(AccName, Promised, Voted, Value, PanelId),
-      pers:close(AccName),
+      pers:store(Name, Promised, Voted, Value, PanelId),
+      pers:close(Name),
       acceptor(Name, Promised, Voted, Value, PanelId);
     _ ->
-      pers:close(AccName),
+      pers:close(Name),
       acceptor(Name, Promised, Voted, Value, StoredPanelId)
   end.
 
@@ -27,10 +26,9 @@ acceptor(Name, Promised, Voted, Value, PanelId) ->
        %% If Round greater than current promise, we promise it
         true ->
             Proposer ! {promise, Round, Voted, Value},
-            {AccName, _} = Name,
-            pers:open(AccName),
-            pers:store(AccName, Round, Voted, Value, PanelId),
-            pers:close(AccName),
+            pers:open(Name),
+            pers:store(Name, Round, Voted, Value, PanelId),
+            pers:close(Name),
 
             io:format("[Acceptor ~w] Phase 1: promised ~w voted ~w colour ~w~n", [Name, Round, Voted, Value]),
 
@@ -59,10 +57,9 @@ acceptor(Name, Promised, Voted, Value, PanelId) ->
               % Update gui
               PanelId ! {updateAcc, "Voted: " ++ io_lib:format("~p", [Round]), 
                         "Promised: " ++ io_lib:format("~p", [Promised]), Proposal},
-              {AccName, _} = Name,
-              pers:open(AccName),
-              pers:store(AccName, Promised, Round, Proposal, PanelId),
-              pers:close(AccName),
+              pers:open(Name),
+              pers:store(Name, Promised, Round, Proposal, PanelId),
+              pers:close(Name),
               %% We update the ACCEPTOR values
               acceptor(Name, Promised, Round, Proposal, PanelId);
             %% Else we keep the previous vote
@@ -77,8 +74,7 @@ acceptor(Name, Promised, Voted, Value, PanelId) ->
           acceptor(Name, Promised, Voted, Value, PanelId)
       end;
     stop ->
-      {AccName, _} = Name,
-      pers:delete(AccName),
+      pers:delete(Name),
       PanelId ! stop,
       ok
   end.
