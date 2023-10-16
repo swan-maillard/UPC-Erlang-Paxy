@@ -27,6 +27,10 @@ start(Sleep) ->
         End = erlang:monotonic_time(),
         Elapsed = erlang:convert_time_unit(End-Begin, native, millisecond),
         io:format("[Paxy] Total elapsed time: ~w ms~n", [Elapsed])
+      end),
+      spawn(fun() ->
+        timer:sleep(500 + rand:uniform(1000)),
+        crash({mariejosette, ?ACC})
       end)
   end.
     
@@ -49,6 +53,7 @@ start_proposers(PropIds, PropInfo, Acceptors, Sleep, Main) ->
       [FirstSleep|RestSleep] = Sleep,
       proposer:start({RegName, ?PRO}, Colour, Acceptors, FirstSleep, PropId, Main),	
       start_proposers(Rest, RestInfo, Acceptors, RestSleep, Main)
+
   end.
 
 wait_proposers(0) ->
@@ -84,11 +89,10 @@ crash(Name) when is_tuple(Name) ->
   pers:open(AccName),
   {_, _, _, Pn} = pers:read(AccName),
   Pn ! {updateAcc, "Voted: CRASHED", "Promised: CRASHED", {0, 0, 0}},
-  unregister(AccName),
+  rpc:call(?ACC, erlang, unregister, [AccName]),
   io:format("CRASH~n"),
   pers:close(AccName),
-  exit(Name, "crash"),
-  timer:sleep(3000),
+  timer:sleep(1000),
   register(AccName, acceptor:start(Name, na));
 crash(_) ->
     ok.
